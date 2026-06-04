@@ -4,6 +4,7 @@ import urllib.request
 from io import StringIO
 
 from app import db
+from app.vapi_adapter import VapiCallAdapter
 
 
 class MockCrmAdapter:
@@ -68,6 +69,8 @@ class GoogleSheetLeadAdapter:
 
 class VoiceCallAdapter:
     def call(self, lead):
+        if os.environ.get("VOICE_PROVIDER", "mock").lower() == "vapi":
+            return VapiCallAdapter().call(lead)
         # Replace this with Twilio, Exotel, or another provider for real calls.
         attempt = int(lead["attempts"]) + 1
         if attempt == 1 and lead["priority"] == "Hot":

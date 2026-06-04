@@ -39,6 +39,14 @@ def zapier_authorized(params):
     return params.get("secret", [""])[0] == secret
 
 
+def vapi_authorized(params, handler):
+    secret = os.environ.get("VAPI_WEBHOOK_SECRET")
+    if not secret:
+        return True
+    header = handler.headers.get("X-Vapi-Secret", "")
+    return header == secret or params.get("secret", [""])[0] == secret
+
+
 def state():
     return {
         "settings": {
@@ -57,9 +65,28 @@ def state():
     }
 
 
+def health_state():
+    return {
+        "ok": True,
+        "mode": agent.get_setting("mode", "approval"),
+        "voice_provider": os.environ.get("VOICE_PROVIDER", "mock"),
+        "vapi_configured": bool(
+            os.environ.get("VAPI_API_KEY")
+            and os.environ.get("VAPI_ASSISTANT_ID")
+            and os.environ.get("VAPI_PHONE_NUMBER_ID")
+        ),
+        "sheet_configured": bool(os.environ.get("GOOGLE_SHEET_URL") or os.environ.get("GOOGLE_SHEET_CSV_URL")),
+        "zoho_configured": bool(os.environ.get("ZOHO_REFRESH_TOKEN")),
+        "telegram_configured": bool(os.environ.get("TELEGRAM_BOT_TOKEN")),
+    }
+
+
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
+        if parsed.path in ("/health", "/api/health"):
+            json_response(self, 200, health_state())
+            return
         if parsed.path == "/api/state":
             json_response(self, 200, state())
             return
@@ -102,6 +129,15 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 lead = agent.update_lead_status(read_post_payload(self))
                 json_response(self, 200, {"ok": True, "lead": lead})
+            except Exception as exc:
+                json_response(self, 400, {"ok": False, "error": str(exc)})
+        elif parsed.path == "/api/vapi/webhook":
+            if not vapi_authorized(params, self):
+                json_response(self, 401, {"ok": False, "error": "Unauthorized"})
+                return
+            try:
+                result = agent.handle_vapi_webhook(read_post_payload(self))
+                json_response(self, 200, result)
             except Exception as exc:
                 json_response(self, 400, {"ok": False, "error": str(exc)})
         elif parsed.path.startswith("/api/approvals/") and parsed.path.endswith("/approve"):

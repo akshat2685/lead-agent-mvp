@@ -24,6 +24,7 @@ ALLOWED_STATUSES = {
     "lost",
     "unresponsive",
     "needs_manual_contact",
+    "calling",
 }
 
 
@@ -331,7 +332,9 @@ def execute_action(lead, action):
     attempts = int(lead["attempts"]) + 1
     next_action = None
     status = "contacted"
-    if result["outcome"] == "no_response" and attempts < 4:
+    if result["outcome"] == "queued":
+        status = "calling"
+    elif result["outcome"] == "no_response" and attempts < 4:
         next_action = db.now() + FOLLOW_UP_SECONDS.get(lead["priority"], 86400)
         status = "follow_up"
     elif result["outcome"] == "no_response":
@@ -344,4 +347,80 @@ def execute_action(lead, action):
         """,
         (attempts, db.now(), next_action, status, lead["id"]),
     )
+    if result.get("provider_call_id"):
+        db.execute(
+            "update leads set active_call_id = ?, last_call_provider = ? where id = ?",
+            (result["provider_call_id"], result.get("provider", "vapi"), lead["id"]),
+        )
     db.event(lead["id"], "call", result["summary"])
+
+
+def handle_vapi_webhook(payload):
+    message = payload.get("message") or payload
+    call = message.get("call") or {}
+    call_id = call.get("id") or message.get("callId") or ""
+    lead = find_lead_for_vapi_call(call_id, call)
+    lead_id = lead["id"] if lead else None
+    message_type = message.get("type", "unknown")
+    status = message.get("status") or call.get("status") or ""
+    ended_reason = message.get("endedReason") or call.get("endedReason") or ""
+    artifact = message.get("artifact") or {}
+    transcript = artifact.get("transcript") or ""
+    summary = message.get("summary") or call.get("summary") or ""
+    details = ", ".join(part for part in (status, ended_reason, summary) if part)
+    db.event(lead_id, f"vapi_{message_type}", details or f"Received Vapi {message_type}.")
+    if not lead:
+        return {"ok": True, "matched": False}
+    if message_type == "status-update":
+        update_vapi_status(lead["id"], status)
+    elif message_type == "end-of-call-report":
+        final_status = final_vapi_status(ended_reason, transcript, summary)
+        db.execute(
+            "update leads set status = ?, active_call_id = '' where id = ?",
+            (final_status, lead["id"]),
+        )
+        if transcript:
+            db.event(lead["id"], "vapi_transcript", transcript[:1500])
+    return {"ok": True, "matched": True}
+
+
+def find_lead_for_vapi_call(call_id, call):
+    if call_id:
+        lead = db.row("select * from leads where active_call_id = ?", (call_id,))
+        if lead:
+            return lead
+    variables = ((call.get("assistantOverrides") or {}).get("variableValues") or {})
+    lead_id = variables.get("lead_id")
+    if lead_id:
+        return db.row("select * from leads where id = ?", (lead_id,))
+    return None
+
+
+def update_vapi_status(lead_id, status):
+    mapping = {
+        "scheduled": "calling",
+        "queued": "calling",
+        "ringing": "calling",
+        "in-progress": "calling",
+        "ended": "contacted",
+    }
+    if status in mapping:
+        db.execute("update leads set status = ? where id = ?", (mapping[status], lead_id))
+
+
+def final_vapi_status(ended_reason, transcript, summary):
+    reason = (ended_reason or "").lower()
+    failed_reasons = (
+        "busy",
+        "did-not-answer",
+        "no-answer",
+        "failed",
+        "cancelled",
+        "canceled",
+        "voicemail",
+    )
+    if any(item in reason for item in failed_reasons):
+        return "follow_up"
+    if transcript or summary:
+        return "contacted"
+    return "follow_up"

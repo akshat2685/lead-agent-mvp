@@ -91,6 +91,8 @@ def migrate_leads(db):
         "fit": "text not null default 'moderate_fit'",
         "external_id": "text not null default ''",
         "contact_status": "text not null default 'unknown'",
+        "active_call_id": "text not null default ''",
+        "last_call_provider": "text not null default ''",
     }
     for name, definition in additions.items():
         if name not in columns:
