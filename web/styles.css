@@ -1,14 +1,18 @@
 :root {
-  color-scheme: light;
-  --bg: #f6f7f9;
-  --panel: #ffffff;
-  --ink: #18202a;
-  --muted: #647084;
-  --line: #dfe4ea;
-  --green: #147d64;
-  --red: #b42318;
-  --blue: #215eb8;
-  --amber: #99660f;
+  color-scheme: dark;
+  --bg: #02060a;
+  --panel: rgba(5, 18, 26, 0.86);
+  --panel-strong: rgba(7, 28, 40, 0.94);
+  --ink: #e8fbff;
+  --muted: #84a8b4;
+  --line: rgba(79, 232, 255, 0.2);
+  --cyan: #24e9ff;
+  --cyan-soft: rgba(36, 233, 255, 0.14);
+  --green: #20e6a2;
+  --red: #ff5370;
+  --blue: #4db6ff;
+  --amber: #ffcb6b;
+  --shadow: 0 18px 70px rgba(0, 230, 255, 0.08);
 }
 
 * {
@@ -17,9 +21,49 @@
 
 body {
   margin: 0;
-  background: var(--bg);
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 18% 8%, rgba(36, 233, 255, 0.18), transparent 28%),
+    radial-gradient(circle at 80% 2%, rgba(32, 230, 162, 0.12), transparent 24%),
+    linear-gradient(135deg, #02060a 0%, #031019 48%, #000 100%);
   color: var(--ink);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  overflow-x: hidden;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(36, 233, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(36, 233, 255, 0.045) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: linear-gradient(to bottom, #000, transparent 78%);
+  z-index: 0;
+}
+
+#particleCanvas,
+.scanlines {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+#particleCanvas {
+  z-index: 1;
+}
+
+.scanlines {
+  z-index: 2;
+  opacity: 0.12;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 6px,
+    rgba(36, 233, 255, 0.16) 7px
+  );
 }
 
 .topbar {
@@ -27,12 +71,29 @@ body {
   justify-content: space-between;
   gap: 24px;
   align-items: center;
-  padding: 22px 28px;
-  background: #fff;
+  padding: 18px 28px;
+  background: rgba(0, 8, 14, 0.84);
+  backdrop-filter: blur(18px);
   border-bottom: 1px solid var(--line);
   position: sticky;
   top: 0;
   z-index: 10;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.34);
+}
+
+.brandBlock {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.signalDot {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--cyan);
+  box-shadow: 0 0 18px var(--cyan), 0 0 40px rgba(36, 233, 255, 0.45);
+  animation: pulse 1.8s ease-in-out infinite;
 }
 
 h1,
@@ -44,11 +105,13 @@ p {
 h1 {
   font-size: 24px;
   font-weight: 720;
+  letter-spacing: 0;
 }
 
 h2 {
   font-size: 16px;
   font-weight: 700;
+  letter-spacing: 0;
 }
 
 h3 {
@@ -63,7 +126,8 @@ p,
 td,
 th,
 button,
-select {
+select,
+input {
   font-size: 14px;
 }
 
@@ -80,13 +144,22 @@ select {
 }
 
 button,
-select {
+select,
+input {
   min-height: 38px;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: #fff;
+  background: rgba(1, 12, 18, 0.8);
   color: var(--ink);
   padding: 0 12px;
+  outline: none;
+}
+
+button:hover,
+select:hover,
+input:focus {
+  border-color: rgba(36, 233, 255, 0.64);
+  box-shadow: 0 0 0 3px rgba(36, 233, 255, 0.08);
 }
 
 button {
@@ -95,17 +168,101 @@ button {
 }
 
 button.primary {
-  background: var(--blue);
-  border-color: var(--blue);
-  color: #fff;
+  background: linear-gradient(135deg, #00d9ff, #128bff);
+  border-color: rgba(36, 233, 255, 0.72);
+  color: #001018;
+  box-shadow: 0 0 22px rgba(36, 233, 255, 0.16);
 }
 
 button.danger {
   color: var(--red);
 }
 
+button.ghost {
+  color: var(--cyan);
+  border-color: rgba(36, 233, 255, 0.28);
+  background: rgba(36, 233, 255, 0.06);
+}
+
 main {
+  position: relative;
+  z-index: 3;
   padding: 24px 28px 40px;
+}
+
+.commandCenter {
+  display: flex;
+  justify-content: space-between;
+  align-items: stretch;
+  gap: 18px;
+  padding: 22px;
+  margin-bottom: 18px;
+  border: 1px solid rgba(36, 233, 255, 0.24);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(36, 233, 255, 0.12), rgba(2, 8, 12, 0.9) 38%),
+    rgba(4, 18, 27, 0.9);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  position: relative;
+}
+
+.commandCenter::after {
+  content: "";
+  position: absolute;
+  left: 22px;
+  right: 22px;
+  bottom: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+  animation: sweep 3.8s linear infinite;
+}
+
+.eyebrow {
+  color: var(--cyan);
+  display: block;
+  font-size: 12px;
+  font-weight: 800;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.commandCenter h2 {
+  font-size: 26px;
+  margin-bottom: 7px;
+}
+
+.commandCenter p,
+.panelHead p {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.systemGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(94px, 1fr));
+  gap: 10px;
+  min-width: min(420px, 100%);
+}
+
+.systemGrid div {
+  border: 1px solid rgba(36, 233, 255, 0.18);
+  border-radius: 8px;
+  background: rgba(0, 12, 18, 0.72);
+  padding: 14px;
+}
+
+.systemGrid span {
+  display: block;
+  color: var(--cyan);
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.systemGrid label {
+  color: var(--muted);
+  display: block;
+  margin-top: 5px;
 }
 
 .metrics {
@@ -120,17 +277,33 @@ main {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 8px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(16px);
 }
 
 .metrics div {
   min-height: 86px;
   padding: 16px;
+  position: relative;
+  overflow: hidden;
+}
+
+.metrics div::after {
+  content: "";
+  position: absolute;
+  inset: auto 12px 10px 12px;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--cyan), transparent);
+  opacity: 0.72;
 }
 
 .metrics span {
   display: block;
   font-size: 26px;
   font-weight: 760;
+  color: var(--cyan);
+  text-shadow: 0 0 18px rgba(36, 233, 255, 0.35);
 }
 
 .metrics label {
@@ -149,6 +322,22 @@ main {
 .panelHead {
   padding: 16px;
   border-bottom: 1px solid var(--line);
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: center;
+  background: linear-gradient(90deg, rgba(36, 233, 255, 0.08), transparent);
+}
+
+.filters {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.filters input {
+  width: min(220px, 100%);
 }
 
 .stack {
@@ -165,6 +354,18 @@ main {
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 14px;
+  background: rgba(0, 10, 16, 0.55);
+  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.approval:hover,
+tbody tr:hover {
+  border-color: rgba(36, 233, 255, 0.48);
+  box-shadow: 0 0 28px rgba(36, 233, 255, 0.1);
+}
+
+.approval:hover {
+  transform: translateY(-2px);
 }
 
 .approval strong {
@@ -205,6 +406,14 @@ td {
   white-space: nowrap;
 }
 
+tbody tr {
+  transition: background 160ms ease, box-shadow 160ms ease;
+}
+
+tbody tr:hover {
+  background: rgba(36, 233, 255, 0.055);
+}
+
 th {
   color: var(--muted);
   font-weight: 650;
@@ -220,23 +429,27 @@ th {
 }
 
 .Hot {
-  color: var(--red);
-  background: #fee4e2;
+  color: #ffd7df;
+  background: rgba(255, 83, 112, 0.18);
+  border: 1px solid rgba(255, 83, 112, 0.32);
 }
 
 .Warm {
-  color: var(--amber);
-  background: #fef0c7;
+  color: #ffe3a8;
+  background: rgba(255, 203, 107, 0.16);
+  border: 1px solid rgba(255, 203, 107, 0.32);
 }
 
 .Nurture {
-  color: var(--green);
-  background: #dcfae6;
+  color: #b5ffe5;
+  background: rgba(32, 230, 162, 0.16);
+  border: 1px solid rgba(32, 230, 162, 0.32);
 }
 
 .Cold {
-  color: #49505a;
-  background: #eef1f4;
+  color: #b5c4ca;
+  background: rgba(132, 168, 180, 0.13);
+  border: 1px solid rgba(132, 168, 180, 0.24);
 }
 
 .timeline {
@@ -255,9 +468,37 @@ th {
   color: var(--muted);
 }
 
+.event strong {
+  color: var(--cyan);
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.75;
+  }
+
+  50% {
+    transform: scale(1.28);
+    opacity: 1;
+  }
+}
+
+@keyframes sweep {
+  0% {
+    transform: translateX(-70%);
+  }
+
+  100% {
+    transform: translateX(70%);
+  }
+}
+
 @media (max-width: 860px) {
   .topbar,
-  .grid {
+  .grid,
+  .commandCenter {
     display: block;
   }
 
@@ -268,6 +509,20 @@ th {
 
   .metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .systemGrid {
+    margin-top: 16px;
+    grid-template-columns: 1fr;
+  }
+
+  .panelHead {
+    display: block;
+  }
+
+  .filters {
+    justify-content: flex-start;
+    margin-top: 12px;
   }
 
   .grid .panel:first-child {

@@ -7,10 +7,15 @@
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
+    <canvas id="particleCanvas" aria-hidden="true"></canvas>
+    <div class="scanlines" aria-hidden="true"></div>
     <header class="topbar">
-      <div>
-        <h1>Lead Agent</h1>
-        <p id="statusLine">Loading agent state...</p>
+      <div class="brandBlock">
+        <span class="signalDot" aria-hidden="true"></span>
+        <div>
+          <h1>Lead Agent</h1>
+          <p id="statusLine">Loading agent state...</p>
+        </div>
       </div>
       <div class="actions">
         <button id="runBtn">Run Scoring</button>
@@ -22,6 +27,19 @@
     </header>
 
     <main>
+      <section class="commandCenter" aria-label="Agent command center">
+        <div>
+          <span class="eyebrow">Pipeline Monitor</span>
+          <h2>Lead command deck</h2>
+          <p>Watch scoring, approvals, research, and outreach status from one live control surface.</p>
+        </div>
+        <div class="systemGrid" aria-label="System signals">
+          <div><span id="modeChip">approval</span><label>Mode</label></div>
+          <div><span id="syncChip">online</span><label>Sync</label></div>
+          <div><span id="leadChip">0</span><label>Leads</label></div>
+        </div>
+      </section>
+
       <section class="metrics" aria-label="Pipeline metrics">
         <div><span id="hotCount">0</span><label>Hot</label></div>
         <div><span id="approvalCount">0</span><label>Approvals</label></div>
@@ -46,7 +64,20 @@
 
         <div class="panel">
           <div class="panelHead">
-            <h2>Lead Queue</h2>
+            <div>
+              <h2>Lead Queue</h2>
+              <p id="leadFilterStatus">Showing all leads</p>
+            </div>
+            <div class="filters">
+              <input id="leadSearch" type="search" placeholder="Search leads" aria-label="Search leads">
+              <select id="priorityFilter" aria-label="Filter by priority">
+                <option value="all">All priorities</option>
+                <option value="Hot">Hot</option>
+                <option value="Warm">Warm</option>
+                <option value="Nurture">Nurture</option>
+                <option value="Cold">Cold</option>
+              </select>
+            </div>
           </div>
           <div class="tableWrap">
             <table>
@@ -67,7 +98,11 @@
 
       <section class="panel">
         <div class="panelHead">
-          <h2>Agent Activity</h2>
+          <div>
+            <h2>Agent Activity</h2>
+            <p>Latest scoring, sync, approval, and call events</p>
+          </div>
+          <button id="refreshToggle" class="ghost">Auto refresh on</button>
         </div>
         <div id="events" class="timeline"></div>
       </section>
