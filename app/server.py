@@ -6,6 +6,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+from app.env_loader import load_env
 from app import agent, db, telegram_bot
 
 
@@ -179,6 +180,7 @@ def scheduler_loop():
 
 
 def main():
+    load_env()
     db.init_db()
     agent.cleanup_dead_leads()
     if os.environ.get("ENABLE_DEMO_LEADS") == "true":

@@ -13,6 +13,8 @@ cp .env.example .env
 python3 -m app.server
 ```
 
+The server automatically loads `.env` from the project root. Environment variables already set by the host override values in `.env`.
+
 The web dashboard runs on `http://127.0.0.1:8765` unless `PORT` is set.
 
 ## Required Production Environment
