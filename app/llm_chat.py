@@ -7,6 +7,7 @@ from app import db
 
 
 OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
+OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 
 SYSTEM_PROMPT = """
@@ -30,12 +31,27 @@ Behavior:
 
 
 def configured():
-    return bool(os.environ.get("OPENAI_API_KEY"))
+    return bool(os.environ.get("OPENAI_API_KEY") or os.environ.get("OPENROUTER_API_KEY"))
 
 
 def answer(user_text, chat_id=None):
     if not configured():
         return offline_answer()
+    if provider() == "openrouter":
+        return openrouter_answer(user_text, chat_id)
+    return openai_answer(user_text, chat_id)
+
+
+def provider():
+    configured_provider = os.environ.get("LLM_PROVIDER", "").strip().lower()
+    if configured_provider:
+        return configured_provider
+    if os.environ.get("OPENROUTER_API_KEY"):
+        return "openrouter"
+    return "openai"
+
+
+def openai_answer(user_text, chat_id=None):
     payload = {
         "model": os.environ.get("OPENAI_MODEL", "gpt-4.1-mini"),
         "input": [
@@ -68,6 +84,43 @@ def answer(user_text, chat_id=None):
     except urllib.error.URLError as exc:
         return f"LLM request failed: {exc.reason}"
     return extract_text(data) or "I could not produce a clear answer. Try asking about leads, Priya, Sicada, webhooks, or call follow-up logic."
+
+
+def openrouter_answer(user_text, chat_id=None):
+    payload = {
+        "model": os.environ.get("OPENROUTER_MODEL", "openai/gpt-4.1-mini"),
+        "messages": [
+            {
+                "role": "system",
+                "content": SYSTEM_PROMPT,
+            },
+            {
+                "role": "user",
+                "content": build_user_context(user_text, chat_id),
+            },
+        ],
+        "max_tokens": int(os.environ.get("OPENROUTER_MAX_TOKENS") or os.environ.get("OPENAI_MAX_OUTPUT_TOKENS", "450")),
+    }
+    request = urllib.request.Request(
+        os.environ.get("OPENROUTER_API_URL", OPENROUTER_CHAT_URL),
+        data=json.dumps(payload).encode(),
+        headers={
+            "Authorization": f"Bearer {os.environ['OPENROUTER_API_KEY']}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": os.environ.get("OPENROUTER_SITE_URL", "http://127.0.0.1:8765"),
+            "X-Title": os.environ.get("OPENROUTER_APP_NAME", "Edysor Lead Agent"),
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=45) as response:
+            data = json.loads(response.read().decode())
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode(errors="replace")[:400]
+        return f"OpenRouter request failed with HTTP {exc.code}: {body}"
+    except urllib.error.URLError as exc:
+        return f"OpenRouter request failed: {exc.reason}"
+    return extract_chat_text(data) or "I could not produce a clear answer. Try asking about leads, Priya, Sicada, webhooks, or call follow-up logic."
 
 
 def build_user_context(user_text, chat_id=None):
@@ -167,14 +220,32 @@ def extract_text(data):
     return "\n".join(chunks).strip()
 
 
+def extract_chat_text(data):
+    choices = data.get("choices") or []
+    if not choices:
+        return ""
+    message = choices[0].get("message") or {}
+    content = message.get("content") or ""
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, dict) and item.get("text"):
+                parts.append(item["text"])
+        return "\n".join(parts).strip()
+    return ""
+
+
 def offline_answer():
     return "\n".join(
         [
             "AI chat is not configured yet.",
             "",
-            "Add this to .env:",
-            "OPENAI_API_KEY=your_key",
-            "OPENAI_MODEL=gpt-4.1-mini",
+            "Add OpenAI or OpenRouter settings to .env:",
+            "LLM_PROVIDER=openrouter",
+            "OPENROUTER_API_KEY=your_key",
+            "OPENROUTER_MODEL=openai/gpt-4.1-mini",
             "",
             "I can still handle commands like /status, /voice, /webhook, /approvals, /research, and /run.",
         ]

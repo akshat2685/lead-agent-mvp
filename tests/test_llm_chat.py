@@ -29,6 +29,19 @@ class LlmChatTest(unittest.TestCase):
         }
         self.assertEqual(llm_chat.extract_text(data), "Use /voice to check Sicada setup.")
 
+    def test_extract_chat_text_from_openrouter_output(self):
+        data = {
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": "Priya should retry during business hours.",
+                    }
+                }
+            ]
+        }
+        self.assertEqual(llm_chat.extract_chat_text(data), "Priya should retry during business hours.")
+
     def test_system_prompt_is_domain_bound(self):
         self.assertIn("Sicada.ai", llm_chat.SYSTEM_PROMPT)
         self.assertIn("outside this scope", llm_chat.SYSTEM_PROMPT)
