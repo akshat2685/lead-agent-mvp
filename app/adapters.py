@@ -4,6 +4,7 @@ import urllib.request
 from io import StringIO
 
 from app import db
+from app.sicada_adapter import SicadaCallAdapter
 from app.vapi_adapter import VapiCallAdapter
 
 
@@ -69,8 +70,11 @@ class GoogleSheetLeadAdapter:
 
 class VoiceCallAdapter:
     def call(self, lead):
-        if os.environ.get("VOICE_PROVIDER", "mock").lower() == "vapi":
+        provider = os.environ.get("VOICE_PROVIDER", "mock").lower()
+        if provider == "vapi":
             return VapiCallAdapter().call(lead)
+        if provider == "sicada":
+            return SicadaCallAdapter().call(lead)
         # Replace this with Twilio, Exotel, or another provider for real calls.
         attempt = int(lead["attempts"]) + 1
         if attempt == 1 and lead["priority"] == "Hot":
@@ -83,7 +87,12 @@ class VoiceCallAdapter:
 
 
 def clean_key(value):
-    return (value or "").strip().lower().replace(" ", "_")
+    key = (value or "").strip().lower().replace(" ", "_")
+    aliases = {
+        "platform_m": "platform",
+        "platformm": "platform",
+    }
+    return aliases.get(key, key)
 
 
 def to_csv_url(url):

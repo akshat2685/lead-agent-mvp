@@ -7,7 +7,7 @@ import time
 import urllib.parse
 import urllib.request
 
-from app import agent, db
+from app import agent, db, llm_chat
 from app.scoring import recommended_action_text, score_details
 from app.web_research import analyze_lead_source, analyze_lead_source_result
 
@@ -51,10 +51,11 @@ def handle(token, chat_id, text):
     if cmd in ("/start", "/help"):
         send(token, chat_id, start_message(), main_keyboard())
     elif cmd == "/status":
-        pending = db.row("select count(*) c from approvals where status = 'pending'")["c"]
-        hot = db.row("select count(*) c from leads where priority = 'Hot'")["c"]
-        paused = agent.get_setting("paused", "false")
-        send(token, chat_id, f"Status: {pending} pending approvals, {hot} hot leads, paused={paused}.")
+        send(token, chat_id, status_message())
+    elif cmd == "/voice":
+        send(token, chat_id, voice_message())
+    elif cmd == "/webhook":
+        send(token, chat_id, webhook_message())
     elif cmd == "/hot":
         leads = db.rows("select * from leads where priority = 'Hot' order by score desc limit 5")
         body = format_priority_leads("🔥 HOT LEADS", leads)
@@ -117,8 +118,13 @@ def handle(token, chat_id, text):
     elif cmd == "/run":
         created = agent.evaluate_leads()
         send(token, chat_id, f"Scored leads and created {created} approval requests.")
+    elif cmd == "/ask" and len(parts) > 1:
+        send(token, chat_id, llm_chat.answer(text.partition(" ")[2], chat_id))
     else:
-        send(token, chat_id, fallback_message(), main_keyboard())
+        if cmd.startswith("/"):
+            send(token, chat_id, fallback_message(), main_keyboard())
+        else:
+            send(token, chat_id, llm_chat.answer(text, chat_id), main_keyboard())
 
 
 def handle_callback(token, callback):
@@ -138,6 +144,9 @@ def handle_callback(token, callback):
             answer_callback(token, callback_id)
         elif action == "source" and len(parts) == 2:
             send(token, chat_id, source_message(parts[1]))
+            answer_callback(token, callback_id)
+        elif action == "voice" and len(parts) == 2:
+            send(token, chat_id, voice_message())
             answer_callback(token, callback_id)
         elif action == "analyze" and len(parts) == 2:
             lead = db.row("select * from leads where id = ?", (int(parts[1]),))
@@ -196,6 +205,9 @@ def start_message():
             "- show pending approvals",
             "- show call approvals",
             "- send google sheet link",
+            "- show voice setup",
+            "- show webhook",
+            "- ask Priya logic questions",
             "- show research tasks",
             "- show lead 14",
             "- analyze lead 14",
@@ -212,7 +224,7 @@ def start_message():
             "- pause the agent",
             "- resume outreach",
             "",
-            "Commands also work: /status /hot /report /approvals /allapprovals /sheet /research /lead ID /analyze ID /why ID /approve ID /approveresearch ID /researchdone ID /nocontact ID /reject ID /mark ID status /setphone ID phone /cleanup /pause /resume /run",
+            "Commands also work: /status /voice /webhook /ask question /hot /report /approvals /allapprovals /sheet /research /lead ID /analyze ID /why ID /approve ID /approveresearch ID /researchdone ID /nocontact ID /reject ID /mark ID status /setphone ID phone /cleanup /pause /resume /run",
         ]
     )
 
@@ -220,8 +232,8 @@ def start_message():
 def fallback_message():
     return "\n".join(
         [
-            "I can help with lead status, reports, approvals, and scoring.",
-            "Try: show call approvals, show research tasks, set phone for lead 14 +91..., approve research for lead 14, delete dead leads, run scoring, pause, or resume.",
+            "I can help with Edysor.ai leads, Sicada/Priya calling, webhooks, retries, reports, approvals, and scoring.",
+            "Try: show voice setup, show webhook, ask how should Priya handle no answer, show call approvals, run scoring, pause, or resume.",
         ]
     )
 
@@ -267,6 +279,10 @@ def normalize_command(text):
         return "/hot"
     if any(phrase in lower for phrase in ("google sheet", "sheet link", "spreadsheet", "leads sheet")):
         return "/sheet"
+    if any(phrase in lower for phrase in ("voice setup", "voice provider", "calling setup", "priya setup", "sicada setup")):
+        return "/voice"
+    if any(phrase in lower for phrase in ("webhook", "callback url", "sicada url", "public url")):
+        return "/webhook"
     if any(phrase in lower for phrase in ("needs contact", "need contact", "contact info", "research queue", "not contactable", "research task")):
         return "/research"
     if any(phrase in lower for phrase in ("delete dead", "cleanup dead", "remove dead", "clean dead")):
@@ -321,6 +337,129 @@ def extract_phone_update(text):
 def sheet_message():
     url = os.environ.get("GOOGLE_SHEET_URL") or os.environ.get("GOOGLE_SHEET_CSV_URL")
     return f"Google Sheet:\n{url}" if url else "No Google Sheet URL is configured."
+
+
+def status_message():
+    pending = db.row("select count(*) c from approvals where status = 'pending'")["c"]
+    call_pending = db.row(
+        "select count(*) c from approvals where status = 'pending' and action = 'call'"
+    )["c"]
+    research_pending = db.row(
+        "select count(*) c from approvals where status = 'pending' and action = 'research_contact'"
+    )["c"]
+    hot = db.row("select count(*) c from leads where priority = 'Hot'")["c"]
+    calling = db.row("select count(*) c from leads where status = 'calling'")["c"]
+    follow_up = db.row("select count(*) c from leads where status = 'follow_up'")["c"]
+    overdue = db.row(
+        "select count(*) c from leads where next_action_at is not null and next_action_at <= ?",
+        (db.now(),),
+    )["c"]
+    paused = agent.get_setting("paused", "false")
+    provider = os.environ.get("VOICE_PROVIDER", "mock")
+    return "\n".join(
+        [
+            "Agent Status",
+            "",
+            f"Paused: {paused}",
+            f"Voice provider: {provider}",
+            f"Pending approvals: {pending}",
+            f"Call approvals: {call_pending}",
+            f"Research tasks: {research_pending}",
+            f"Hot leads: {hot}",
+            f"Currently calling: {calling}",
+            f"Follow-up leads: {follow_up}",
+            f"Due now: {overdue}",
+        ]
+    )
+
+
+def voice_message():
+    provider = os.environ.get("VOICE_PROVIDER", "mock").lower()
+    lines = [
+        "Voice Setup",
+        "",
+        f"Provider: {provider}",
+    ]
+    if provider == "sicada":
+        lines.extend(
+            [
+                f"Sicada API key: {configured_text('SICADA_API_KEY')}",
+                f"Priya agent ID: {configured_text('SICADA_AGENT_ID')}",
+                f"Call endpoint: {configured_text('SICADA_CALL_ENDPOINT')}",
+                f"Webhook secret: {configured_text('SICADA_WEBHOOK_SECRET')}",
+                "",
+                "Webhook:",
+                webhook_url() or "Set PUBLIC_WEBHOOK_BASE_URL or paste the localtunnel URL in Sicada manually.",
+            ]
+        )
+    elif provider == "vapi":
+        lines.extend(
+            [
+                f"Vapi API key: {configured_text('VAPI_API_KEY')}",
+                f"Assistant ID: {configured_text('VAPI_ASSISTANT_ID')}",
+                f"Phone number ID: {configured_text('VAPI_PHONE_NUMBER_ID')}",
+            ]
+        )
+    else:
+        lines.append("Mock calls are enabled. No real customer calls will be placed.")
+    lines.extend(["", "Recent call events:", recent_call_events()])
+    return "\n".join(lines)
+
+
+def webhook_message():
+    url = webhook_url()
+    lines = [
+        "Sicada Webhook",
+        "",
+        url or "No public webhook base URL is configured.",
+        "",
+        f"Webhook secret: {configured_text('SICADA_WEBHOOK_SECRET')}",
+        "",
+        "Use this route in Sicada:",
+        "/api/sicada/webhook",
+    ]
+    if not url:
+        lines.extend(
+            [
+                "",
+                "If you are using localtunnel, paste your current public URL plus /api/sicada/webhook into Sicada.",
+            ]
+        )
+    return "\n".join(lines)
+
+
+def webhook_url():
+    direct = os.environ.get("SICADA_WEBHOOK_URL")
+    if direct:
+        return direct
+    base = os.environ.get("PUBLIC_WEBHOOK_BASE_URL") or os.environ.get("PUBLIC_BASE_URL")
+    if not base:
+        return ""
+    return f"{base.rstrip('/')}/api/sicada/webhook"
+
+
+def configured_text(key):
+    return "configured" if os.environ.get(key) else "missing"
+
+
+def recent_call_events():
+    events = db.rows(
+        """
+        select leads.name, events.kind, events.message, events.created_at
+        from events left join leads on leads.id = events.lead_id
+        where events.kind in ('call', 'sicada_webhook', 'sicada_summary', 'vapi_end-of-call-report')
+        order by events.created_at desc
+        limit 3
+        """
+    )
+    if not events:
+        return "No call events yet."
+    lines = []
+    for item in events:
+        lead_name = item["name"] or "System"
+        message = (item["message"] or "")[:140]
+        lines.append(f"- {lead_name}: {item['kind']} - {message}")
+    return "\n".join(lines)
 
 
 def approval_queue(action=None, title=None):
@@ -413,7 +552,10 @@ def main_keyboard():
             {"text": "Call Approvals", "callback_data": "queue:call"},
             {"text": "Research Tasks", "callback_data": "queue:research_contact"},
         ],
-        [{"text": "Google Sheet", "callback_data": "source:sheet"}],
+        [
+            {"text": "Google Sheet", "callback_data": "source:sheet"},
+            {"text": "Voice Setup", "callback_data": "voice:status"},
+        ],
     ]
 
 
@@ -522,6 +664,9 @@ def lead_detail(lead_id):
         (lead_id,),
     )
     approval_line = f"Pending approval: #{pending['id']} ({pending['action']})" if pending else "Pending approval: none"
+    next_action = format_time(lead["next_action_at"]) if lead.get("next_action_at") else "none"
+    active_call = lead.get("active_call_id") or "none"
+    provider = lead.get("last_call_provider") or os.environ.get("VOICE_PROVIDER", "mock")
     return "\n".join(
         [
             f"Lead #{lead['id']}: {lead['name']}",
@@ -530,6 +675,10 @@ def lead_detail(lead_id):
             f"Contactability: {lead['contact_status']}",
             f"Source: {lead['source']}",
             f"Contact: {lead['phone']}",
+            f"Attempts: {lead['attempts']}",
+            f"Next follow-up: {next_action}",
+            f"Voice provider: {provider}",
+            f"Active call: {active_call}",
             approval_line,
             "",
             "Reason:",
@@ -542,6 +691,13 @@ def lead_detail(lead_id):
             lead["notes"][:900] or "-",
         ]
     )
+
+
+def format_time(timestamp):
+    try:
+        return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(int(timestamp)))
+    except (TypeError, ValueError):
+        return "unknown"
 
 
 def lead_reason(lead_id):

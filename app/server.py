@@ -48,6 +48,14 @@ def vapi_authorized(params, handler):
     return header == secret or params.get("secret", [""])[0] == secret
 
 
+def sicada_authorized(params, handler):
+    secret = os.environ.get("SICADA_WEBHOOK_SECRET")
+    if not secret:
+        return True
+    header = handler.headers.get("X-Sicada-Secret", "")
+    return header == secret or params.get("secret", [""])[0] == secret
+
+
 def state():
     return {
         "settings": {
@@ -75,6 +83,11 @@ def health_state():
             os.environ.get("VAPI_API_KEY")
             and os.environ.get("VAPI_ASSISTANT_ID")
             and os.environ.get("VAPI_PHONE_NUMBER_ID")
+        ),
+        "sicada_configured": bool(
+            os.environ.get("SICADA_API_KEY")
+            and os.environ.get("SICADA_AGENT_ID")
+            and os.environ.get("SICADA_CALL_ENDPOINT")
         ),
         "sheet_configured": bool(os.environ.get("GOOGLE_SHEET_URL") or os.environ.get("GOOGLE_SHEET_CSV_URL")),
         "zoho_configured": bool(os.environ.get("ZOHO_REFRESH_TOKEN")),
@@ -138,6 +151,15 @@ class Handler(BaseHTTPRequestHandler):
                 return
             try:
                 result = agent.handle_vapi_webhook(read_post_payload(self))
+                json_response(self, 200, result)
+            except Exception as exc:
+                json_response(self, 400, {"ok": False, "error": str(exc)})
+        elif parsed.path == "/api/sicada/webhook":
+            if not sicada_authorized(params, self):
+                json_response(self, 401, {"ok": False, "error": "Unauthorized"})
+                return
+            try:
+                result = agent.handle_sicada_webhook(read_post_payload(self))
                 json_response(self, 200, result)
             except Exception as exc:
                 json_response(self, 400, {"ok": False, "error": str(exc)})

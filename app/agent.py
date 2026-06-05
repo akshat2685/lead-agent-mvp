@@ -359,7 +359,7 @@ def handle_vapi_webhook(payload):
     message = payload.get("message") or payload
     call = message.get("call") or {}
     call_id = call.get("id") or message.get("callId") or ""
-    lead = find_lead_for_vapi_call(call_id, call)
+    lead = find_lead_for_provider_call(call_id, "vapi", call)
     lead_id = lead["id"] if lead else None
     message_type = message.get("type", "unknown")
     status = message.get("status") or call.get("status") or ""
@@ -375,21 +375,75 @@ def handle_vapi_webhook(payload):
         update_vapi_status(lead["id"], status)
     elif message_type == "end-of-call-report":
         final_status = final_vapi_status(ended_reason, transcript, summary)
-        db.execute(
-            "update leads set status = ?, active_call_id = '' where id = ?",
-            (final_status, lead["id"]),
-        )
+        apply_call_final_status(lead, final_status)
         if transcript:
             db.event(lead["id"], "vapi_transcript", transcript[:1500])
     return {"ok": True, "matched": True}
 
 
-def find_lead_for_vapi_call(call_id, call):
+def handle_sicada_webhook(payload):
+    event = payload.get("event") or payload.get("type") or payload.get("status") or "unknown"
+    call = payload.get("call") or payload.get("data") or payload
+    call_id = (
+        call.get("id")
+        or call.get("call_id")
+        or call.get("callId")
+        or payload.get("call_id")
+        or payload.get("callId")
+        or ""
+    )
+    metadata = call.get("metadata") or payload.get("metadata") or {}
+    lead = find_lead_for_provider_call(call_id, "sicada", {"metadata": metadata})
+    lead_id = lead["id"] if lead else None
+    raw_status = " ".join(
+        str(part or "")
+        for part in (
+            event,
+            call.get("status"),
+            call.get("outcome"),
+            call.get("ended_reason") or call.get("endedReason"),
+            call.get("disposition"),
+        )
+    )
+    transcript = (
+        call.get("transcript")
+        or payload.get("transcript")
+        or ((call.get("artifact") or {}).get("transcript"))
+        or ""
+    )
+    summary = (
+        call.get("summary")
+        or payload.get("summary")
+        or call.get("call_summary")
+        or payload.get("call_summary")
+        or ""
+    )
+    details = ", ".join(part for part in (raw_status.strip(), summary) if part)
+    db.event(lead_id, "sicada_webhook", details or "Received Sicada webhook.")
+    if not lead:
+        return {"ok": True, "matched": False}
+    final_status = final_provider_status(raw_status, transcript, summary)
+    apply_call_final_status(lead, final_status)
+    if transcript:
+        db.event(lead["id"], "sicada_transcript", transcript[:1500])
+    if summary:
+        db.event(lead["id"], "sicada_summary", summary[:1500])
+    return {"ok": True, "matched": True, "status": final_status}
+
+
+def find_lead_for_provider_call(call_id, provider, call):
     if call_id:
-        lead = db.row("select * from leads where active_call_id = ?", (call_id,))
+        lead = db.row(
+            "select * from leads where active_call_id = ? and last_call_provider = ?",
+            (call_id, provider),
+        )
         if lead:
             return lead
-    variables = ((call.get("assistantOverrides") or {}).get("variableValues") or {})
+    variables = (
+        ((call.get("assistantOverrides") or {}).get("variableValues") or {})
+        or call.get("metadata")
+        or {}
+    )
     lead_id = variables.get("lead_id")
     if lead_id:
         return db.row("select * from leads where id = ?", (lead_id,))
@@ -409,18 +463,46 @@ def update_vapi_status(lead_id, status):
 
 
 def final_vapi_status(ended_reason, transcript, summary):
-    reason = (ended_reason or "").lower()
+    return final_provider_status(ended_reason, transcript, summary)
+
+
+def final_provider_status(reason_text, transcript, summary):
+    reason = (reason_text or "").lower()
     failed_reasons = (
         "busy",
         "did-not-answer",
         "no-answer",
+        "no_answer",
+        "not_answered",
+        "unanswered",
         "failed",
         "cancelled",
         "canceled",
         "voicemail",
+        "invalid",
+        "wrong",
     )
     if any(item in reason for item in failed_reasons):
         return "follow_up"
     if transcript or summary:
         return "contacted"
     return "follow_up"
+
+
+def apply_call_final_status(lead, final_status):
+    next_action = None
+    status = final_status
+    attempts = int(lead["attempts"])
+    if final_status == "follow_up":
+        if attempts < 4:
+            next_action = db.now() + FOLLOW_UP_SECONDS.get(lead["priority"], 86400)
+        else:
+            status = "unresponsive"
+    db.execute(
+        """
+        update leads
+        set status = ?, next_action_at = ?, active_call_id = ''
+        where id = ?
+        """,
+        (status, next_action, lead["id"]),
+    )
