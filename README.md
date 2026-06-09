@@ -1,28 +1,28 @@
-# Lead Agent MVP
+# 🚀 Lead Agent MVP
 
-This repository is a self-serve AI agent scaffold.
+An AI lead agent scaffold for building your own workflow automation, outreach, and CRM-ready agent stack.
 
-Someone cloning this repo should immediately see:
+This repo is designed so someone cloning it can quickly see:
 
-- the agent entrypoint
-- the local data layer
-- the Telegram bot interface
-- blank integration adapters
-- a clear environment template
-- the files they need to customize for their own agent
+- 🤖 the agent entrypoint
+- 🗃️ the local data layer
+- 💬 the Telegram operator interface
+- 🔌 blank integration adapters
+- 🧩 the environment template
+- 🛠️ the exact files to customize for their own agent
 
-## What It Does
+## ✨ What It Does
 
-- Ingests lead text from Telegram
-- Deduplicates leads by email and phone
-- Scores leads with local rules
-- Buckets leads into hot, warm, nurture, or cold
-- Tracks audit history in PostgreSQL
-- Provides blank integration surfaces for voice, chat, and CRM sync
+- 📥 Ingests lead text from Telegram
+- 🧹 Deduplicates leads by email and phone
+- 🎯 Scores leads with local rules
+- 🟢 Buckets leads into hot, warm, nurture, or cold
+- 📚 Tracks audit history in PostgreSQL
+- 🧱 Leaves voice, chat, and CRM integrations as clean placeholders
 
-## Files To Customize
+## 🧰 Files To Customize
 
-If someone wants their own version of this agent, these are the main files to edit:
+If you want to make this repo your own, start here:
 
 - [`app/agent.py`](app/agent.py) - scoring, routing, and agent behavior
 - [`app/db.py`](app/db.py) - schema and local persistence
@@ -32,7 +32,7 @@ If someone wants their own version of this agent, these are the main files to ed
 - [`app/chat_adapter_scida.py`](app/chat_adapter_scida.py) - chat adapter placeholder
 - [`app/zoho_sync.py`](app/zoho_sync.py) - CRM sync placeholder
 
-## Project Structure
+## 🧱 Project Structure
 
 ```text
 lead-agent-mvp/
@@ -53,10 +53,10 @@ lead-agent-mvp/
     zoho_webhooks.py
 ```
 
-## Quick Start
+## ⚡ Quick Start
 
 1. Clone the repo.
-2. Copy `.env.example` to `.env`.
+2. Copy [`.env.example`](.env.example) to `.env`.
 3. Fill in the values you need.
 4. Install dependencies.
 5. Start the bot or the API server.
@@ -72,7 +72,7 @@ Optional API server:
 python -m app.server
 ```
 
-## Environment Setup
+## 🔐 Environment Setup
 
 This repo includes [`.env.example`](.env.example) as the tracked template.
 
@@ -114,19 +114,19 @@ copy .env.example .env
 - `ZOHO_REVIEW_THRESHOLD`
 - `BASE_URL`
 
-## For Your Own Agent
+## 🧠 Make It Yours
 
-If you want to make this repo your own:
+To turn this into your own agent:
 
-- replace the brand names and labels in the README
-- tune the scoring rules in `app/agent.py`
-- change the local database schema in `app/db.py`
-- wire your own webhook integrations in the adapter files
-- add or remove Telegram commands in `app/bot/telegram_handlers.py`
+- rename the project branding in the README
+- tune scoring logic in [`app/agent.py`](app/agent.py)
+- adjust the schema in [`app/db.py`](app/db.py)
+- wire your own integrations in the adapter files
+- add, remove, or rename Telegram commands in [`app/bot/telegram_handlers.py`](app/bot/telegram_handlers.py)
 
-## Notes
+## 📝 Notes
 
 - The integration files are intentionally blank placeholders.
 - The repo is usable without external services.
 - `.env` should stay uncommitted.
-- `.env.example` is the file other people should copy and fill in.
+- `.env.example` is the file people should copy and fill in.
