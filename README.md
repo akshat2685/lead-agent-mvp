@@ -1,132 +1,57 @@
-# 🚀 Lead Agent MVP
+# Edysor AI Revenue Intelligence OS (v3)
 
-An AI lead agent scaffold for building your own workflow automation, outreach, and CRM-ready agent stack.
+Welcome to the **Edysor AI Lead Agent MVP v3**. This project has evolved from a simple SQLite-backed Telegram routing bot into a production-grade, AI-orchestrated Revenue Intelligence Operating System.
 
-This repo is designed so someone cloning it can quickly see:
+## Version 3 Upgrades
+This version introduces 10 massive architectural upgrades:
+1. **Security & Authentication**: JWT + bcrypt role-based access control (Admin, Agent, Viewer) and a Web UI.
+2. **Database Upgrade**: Scalable `SQLAlchemy` ORM supporting `PostgreSQL` connection pooling, managed by `Alembic`.
+3. **AI-Powered Lead Scoring**: Dynamic LLM-driven scoring with 24-hour result caching.
+4. **Multi-Channel Outreach**: Intelligent `ChannelRouter` directing Hot leads to Voice (Scida), Warm leads to WhatsApp, and Nurture leads to Email.
+5. **Autonomous Mode & Guardrails**: Daily spend caps, business hour enforcement, and an emergency `/stop` switch.
+6. **Lead Enrichment**: Auto-research pipelines for Email Validation and LinkedIn Scraping prior to scoring.
+7. **Analytics Dashboard**: Chart.js visualizations for Conversion Funnels, Agent Productivity, and Revenue Attribution.
+8. **Docker & CI/CD**: Fully containerized stack (`app`, `db`, `redis`) with GitHub Actions deployment workflows.
+9. **Bi-Directional CRM Sync**: Automatically push transcripts, LLM scores, and bucket categorizations straight into Zoho CRM.
+10. **Conversation Memory**: LLM-generated summaries of past interactions are seamlessly injected into outbound AI outreach prompts.
 
-- 🤖 the agent entrypoint
-- 🗃️ the local data layer
-- 💬 the Telegram operator interface
-- 🔌 blank integration adapters
-- 🧩 the environment template
-- 🛠️ the exact files to customize for their own agent
+## Prerequisites & Getting Started
 
-## ✨ What It Does
+Before you can completely run this in production, you **MUST** configure the external APIs:
 
-- 📥 Ingests lead text from Telegram
-- 🧹 Deduplicates leads by email and phone
-- 🎯 Scores leads with local rules
-- 🟢 Buckets leads into hot, warm, nurture, or cold
-- 📚 Tracks audit history in PostgreSQL
-- 🧱 Leaves voice, chat, and CRM integrations as clean placeholders
+1. **Environment Setup:**
+   Duplicate `.env.example` and rename it to `.env`.
+   
+2. **Required API Keys:**
+   - `OPENAI_API_KEY`: Required for the Lead Scorer, Orchestrator, and Memory engine.
+   - `TELEGRAM_BOT_TOKEN`: Required to boot the bot.
+   - `SCIDA_VOICE_AGENT_KEY` / `SCIDA_CHAT_AGENT_KEY`: The API keys for Scida voice/chat agents.
+   - `PROXYCURL_API_KEY` & `ZEROBOUNCE_API_KEY` (Optional): If you want live Lead Enrichment to work.
+   - `ZOHO_*` (Optional): If you want the Bi-Directional CRM sync to activate.
 
-## 🧰 Files To Customize
+3. **Connecting the "Mock" APIs:**
+   The architecture is built, but the final network requests to 3rd party providers are currently stubbed. 
+   - Open `app/channels/voice.py`, `whatsapp.py`, `email.py`, and `sms.py`.
+   - Add Python `requests.post()` logic using the specific schema of your provider (Twilio, SendGrid, Scida).
+   - Open `app/zoho_sync.py` and uncomment the `requests.post()` calls.
 
-If you want to make this repo your own, start here:
+## Running the Application
 
-- [`app/agent.py`](app/agent.py) - scoring, routing, and agent behavior
-- [`app/db.py`](app/db.py) - schema and local persistence
-- [`app/bot/telegram_handlers.py`](app/bot/telegram_handlers.py) - Telegram commands and operator flow
-- [`app/server.py`](app/server.py) - HTTP endpoints and webhooks
-- [`app/voice_adapter_scida.py`](app/voice_adapter_scida.py) - voice adapter placeholder
-- [`app/chat_adapter_scida.py`](app/chat_adapter_scida.py) - chat adapter placeholder
-- [`app/zoho_sync.py`](app/zoho_sync.py) - CRM sync placeholder
-
-## 🧱 Project Structure
-
-```text
-lead-agent-mvp/
-  .env.example
-  README.md
-  requirements.txt
-  app/
-    agent.py
-    bot/
-      telegram_handlers.py
-    chat_adapter_scida.py
-    db.py
-    server.py
-    voice_adapter_scida.py
-    zoho_client.py
-    zoho_mapper.py
-    zoho_sync.py
-    zoho_webhooks.py
+### Option A: Docker (Recommended)
+This boots the Web App, PostgreSQL 15, and Redis caching.
+```bash
+docker-compose up --build -d
 ```
+Visit `http://localhost:8765/login` to see your new dashboard! The default admin login is `admin@edysor.ai` / `admin123`.
 
-## ⚡ Quick Start
-
-1. Clone the repo.
-2. Copy [`.env.example`](.env.example) to `.env`.
-3. Fill in the values you need.
-4. Install dependencies.
-5. Start the bot or the API server.
-
+### Option B: Local Python Environment
+If you don't use Docker, you can run it via Python with SQLite fallback:
 ```bash
 pip install -r requirements.txt
-python -m app.bot.telegram_handlers
-```
-
-Optional API server:
-
-```bash
+alembic init migrations
 python -m app.server
 ```
-
-## 🔐 Environment Setup
-
-This repo includes [`.env.example`](.env.example) as the tracked template.
-
-Copy it to `.env` before running the app:
-
+*In a separate terminal, start the bot:*
 ```bash
-copy .env.example .env
+python -m app.bot.telegram_handlers
 ```
-
-### Required Local Settings
-
-- `TELEGRAM_BOT_TOKEN`
-- `TELEGRAM_CHAT_ID`
-- `DB_HOST`
-- `DB_NAME`
-- `DB_USER`
-- `DB_PASSWORD`
-
-### Optional Integration Settings
-
-- `SCIDA_VOICE_AGENT_URL`
-- `SCIDA_VOICE_AGENT_KEY`
-- `SCIDA_CHAT_AGENT_URL`
-- `SCIDA_CHAT_AGENT_KEY`
-- `ZOHO_ACCOUNTS_URL`
-- `ZOHO_API_DOMAIN`
-- `ZOHO_CLIENT_ID`
-- `ZOHO_CLIENT_SECRET`
-- `ZOHO_REFRESH_TOKEN`
-- `ZOHO_ACCESS_TOKEN`
-
-### Optional Runtime Settings
-
-- `ZOHO_API_VERSION`
-- `ZOHO_REDIRECT_URI`
-- `ZOHO_DEFAULT_OWNER_ID`
-- `ZOHO_DEAL_PIPELINE`
-- `ZOHO_DEAL_STAGE`
-- `ZOHO_REVIEW_THRESHOLD`
-- `BASE_URL`
-
-## 🧠 Make It Yours
-
-To turn this into your own agent:
-
-- rename the project branding in the README
-- tune scoring logic in [`app/agent.py`](app/agent.py)
-- adjust the schema in [`app/db.py`](app/db.py)
-- wire your own integrations in the adapter files
-- add, remove, or rename Telegram commands in [`app/bot/telegram_handlers.py`](app/bot/telegram_handlers.py)
-
-## 📝 Notes
-
-- The integration files are intentionally blank placeholders.
-- The repo is usable without external services.
-- `.env` should stay uncommitted.
-- `.env.example` is the file people should copy and fill in.
