@@ -5,6 +5,9 @@ from datetime import datetime
 from . import db
 from .chat_adapter_scida import ScidaChatAdapter
 from .voice_adapter_scida import ScidaVoiceAdapter
+from .agents import LeadOrchestrator, CRMDocumentationAgent, HumanEscalationEngine, FollowUpScheduler
+from .agents.lead_scorer import LeadScorer
+from .channels import ChannelRouter
 
 logger = logging.getLogger(__name__)
 
@@ -118,14 +121,19 @@ def scoring_service(lead_data):
         lead_data.setdefault("bucket", "Cold")
         lead_data.setdefault("score", 0)
         return lead_data
-    score = calculate_score(lead_data)
-    lead_data["score"] = score
-    lead_data["bucket"] = bucket_for_score(score)
-    return lead_data
+    
+    scorer = LeadScorer()
+    return scorer.score_lead(lead_data)
 
 
 def agent_orchestrator(lead_data):
-    lead_data["llm_summary"] = "Integrations are intentionally blank in this scaffold."
+    # Pass through Lead Orchestrator
+    orchestrator = LeadOrchestrator()
+    decision = orchestrator.determine_action(lead_data)
+    
+    lead_data["orchestrator_decision"] = decision
+    lead_data["llm_summary"] = f"Action: {decision.get('action')}, Reason: {decision.get('reason')}"
+    
     return lead_data
 
 
@@ -268,22 +276,48 @@ def process_approved_lead(lead_id):
     lead = db.query_lead(lead_id)
     if not lead:
         return {"error": "Lead not found"}
-    score = int(lead.get("score") or 0)
-    bucket = lead.get("bucket") or bucket_for_score(score)
-    if bucket == "Hot" or score >= 80:
-        result = queue_for_voice_call(lead_id)
-    elif bucket == "Warm" or score >= 60:
-        result = queue_for_chat(lead_id, channel="sms")
+        
+    # 1. Lead Orchestrator
+    orchestrator = LeadOrchestrator()
+    orch_decision = orchestrator.determine_action(lead)
+    action = orch_decision.get("action", "WAIT")
+    
+    # 2. Channel Router (If Action warrants outreach)
+    result = {"channel": "none"}
+    if action in ["CALL_NOW", "SCHEDULE_CALL", "SEND_WHATSAPP"]:
+        approved = lead.get('status') == 'approved'
+        result = ChannelRouter.route_and_send(lead, message_template="Hello from Edysor AI", approved=approved)
     else:
         result = queue_nurture_sequence(lead_id)
+
+    # 4. CRM Update
+    crm_agent = CRMDocumentationAgent()
+    crm_update = crm_agent.generate_record(lead)
+    
+    # 5. Scheduler
+    scheduler = FollowUpScheduler()
+    schedule_decision = scheduler.schedule(lead)
+    
+    # 6. Human Escalation Check
+    escalation_engine = HumanEscalationEngine()
+    escalation_decision = escalation_engine.check_escalation(lead)
+    
+    # Update DB with all these AI decisions
     if "error" not in result:
         db.update_lead(
             lead_id,
             {
-                "status": "assigned_for_outreach",
-                "assigned_channel": result["channel"],
-                "outreach_channel": result["channel"],
+                "status": "assigned_for_outreach" if not escalation_decision.get("escalate") else "escalated",
+                "assigned_channel": result.get("channel", "none"),
+                "outreach_channel": result.get("channel", "none"),
             },
         )
-        db.log_action(lead_id, "assigned_channel", f"Channel: {result['channel']}", "system")
+        db.log_action(lead_id, "ai_orchestrated", 
+            f"Action: {action}, Channel: {result.get('channel')}, Next Contact: {schedule_decision.get('next_contact_time')}", 
+            "system")
+            
+        if escalation_decision.get("escalate"):
+            db.log_action(lead_id, "escalated", escalation_decision.get("reason"), "human_escalation_engine")
+            # This triggers Telegram Notification implicitly (if hooked up in bot)
+
     return result

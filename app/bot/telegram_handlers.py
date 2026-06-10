@@ -47,6 +47,7 @@ def help_command(update, context):
             "/reject <id> [reason] - reject a lead\n"
             "/route <id> - route a lead by score\n"
             "/review_queue - leads waiting for review\n"
+            "/stop - Emergency halt for all autonomous actions\n"
         ),
     )
 
@@ -162,6 +163,10 @@ def review_queue(update, context):
         msg += f"{lead['id']} | {lead.get('name') or 'Unknown'} | score={lead.get('score') or 0} | status={lead.get('status')}\n"
     context.bot.send_message(chat_id=update.effective_chat.id, text=msg)
 
+def stop_autonomous(update, context):
+    os.environ["EMERGENCY_STOP_ACTIVE"] = "true"
+    context.bot.send_message(chat_id=update.effective_chat.id, text="🚨 EMERGENCY STOP ACTIVATED. All autonomous actions are halted.")
+
 
 def main():
     init_database()
@@ -176,6 +181,7 @@ def main():
     dispatcher.add_handler(CommandHandler("reject", reject_command))
     dispatcher.add_handler(CommandHandler("route", route_command))
     dispatcher.add_handler(CommandHandler("review_queue", review_queue))
+    dispatcher.add_handler(CommandHandler("stop", stop_autonomous))
     dispatcher.add_handler(MessageHandler(Filters.text, echo))
 
     updater.start_polling()

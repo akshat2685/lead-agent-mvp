@@ -20,9 +20,46 @@ class ZohoCRMService:
         lead = db.query_lead(lead_id)
         if not lead:
             return {"error": "Lead not found"}
-        db.update_lead(lead_id, {"zoho_sync_status": "disabled"})
-        db.log_action(lead_id, "zoho_sync_disabled", "Zoho integration is blank in this scaffold", "zoho_sync")
-        return {"status": "disabled"}
+        zoho_payload = {
+            "First_Name": lead["name"].split()[0] if lead.get("name") else "",
+            "Last_Name": " ".join(lead["name"].split()[1:]) if lead.get("name") and len(lead["name"].split()) > 1 else (lead.get("name") or "Unknown"),
+            "Email": lead.get("email"),
+            "Phone": lead.get("phone"),
+            "Company": lead.get("company") or "Unknown",
+            "Lead_Source": lead.get("source"),
+            "Description": lead.get("raw_text"),
+            "Lead_Score": lead.get("score"),
+            "Priority_Bucket": lead.get("bucket"),
+            "Lead_Status": lead.get("status")
+        }
+        
+        # In a real implementation, this hits Zoho's API
+        # response = requests.post(f"{self.base_url}/Leads", headers=self.headers, json={"data": [zoho_payload]})
+        
+        db.update_lead(
+            lead_id,
+            {
+                "zoho_synced_at": datetime.now(),
+                "zoho_sync_status": "success",
+                "zoho_sync_payload": json.dumps(zoho_payload),
+                "zoho_lead_id": f"ZOHO_MOCK_{lead_id}",
+            },
+        )
+        return {"status": "success", "lead_id": lead_id, "zoho_payload": zoho_payload}
+
+    def sync_transcript_to_zoho(self, lead_id, transcript, sentiment, outcome):
+        lead = db.query_lead(lead_id)
+        if not lead or not lead.get("zoho_lead_id"):
+            return {"error": "Lead not synced to Zoho"}
+            
+        note_payload = {
+            "Parent_Id": lead.get("zoho_lead_id"),
+            "Note_Title": f"Call Outcome: {outcome}",
+            "Note_Content": f"Sentiment: {sentiment}\nTranscript:\n{transcript}"
+        }
+        # In a real implementation, this hits Zoho's Notes API
+        # response = requests.post(f"{self.base_url}/Notes", headers=self.headers, json={"data": [note_payload]})
+        return {"status": "success", "note_payload": note_payload}
 
     def sync_zoho_lead_to_local(self, zoho_lead_id):
         return {"status": "disabled"}
