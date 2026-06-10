@@ -1,0 +1,15 @@
+CRM Lead
+   ↓
+Lead Orchestrator
+   ↓
+Contact Strategy
+   ↓
+Scida Voice / WhatsApp
+   ↓
+CRM Update
+   ↓
+Scheduler
+   ↓
+Human Escalation Check
+   ↓
+Telegram Notification
