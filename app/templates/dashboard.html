@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Dashboard - Edysor AI</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: system-ui, sans-serif; background: #f4f4f5; margin: 0; padding: 2rem; }
+        header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
+        .btn { padding: 0.5rem 1rem; background: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer; text-decoration: none; }
+        .card { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 2rem; }
+        .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+        canvas { max-width: 100%; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Analytics Dashboard</h1>
+        <div>
+            <button class="btn" onclick="exportCSV()">Export CSV</button>
+            <button class="btn" onclick="logout()" style="background: #ef4444; margin-left: 1rem;">Log Out</button>
+        </div>
+    </header>
+    
+    <div class="charts-grid">
+        <div class="card">
+            <h2>Conversion Funnel</h2>
+            <canvas id="funnelChart"></canvas>
+        </div>
+        <div class="card">
+            <h2>Source Attribution</h2>
+            <canvas id="sourceChart"></canvas>
+        </div>
+    </div>
+
+    <script>
+        const token = localStorage.getItem('token');
+        if (!token) {
+            window.location.href = '/login';
+        }
+
+        async function fetchAnalytics() {
+            const res = await fetch('/api/analytics/summary', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.status === 401 || res.status === 403) {
+                logout();
+                return;
+            }
+            const data = await res.json();
+            renderCharts(data);
+        }
+
+        function renderCharts(data) {
+            // Funnel Chart
+            new Chart(document.getElementById('funnelChart'), {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(data.funnel),
+                    datasets: [{
+                        label: 'Leads',
+                        data: Object.values(data.funnel),
+                        backgroundColor: '#3b82f6'
+                    }]
+                }
+            });
+
+            // Source Pie Chart
+            new Chart(document.getElementById('sourceChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(data.source_attribution),
+                    datasets: [{
+                        data: Object.values(data.source_attribution),
+                        backgroundColor: ['#10b981', '#f59e0b', '#ef4444']
+                    }]
+                }
+            });
+        }
+
+        async function exportCSV() {
+            const res = await fetch('/api/analytics/export', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const blob = await res.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'analytics_export.csv';
+            a.click();
+        }
+
+        function logout() {
+            localStorage.removeItem('token');
+            window.location.href = '/login';
+        }
+
+        fetchAnalytics();
+    </script>
+</body>
+</html>
